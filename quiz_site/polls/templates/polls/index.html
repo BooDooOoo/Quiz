@@ -1,0 +1,252 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Опросник</title>
+    <link
+            href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/css/bootstrap.min.css"
+            rel="stylesheet"
+            integrity="sha384-giJF6kkoqNQ00vy+HMDP7azOuL0xtbfIcaT9wjKHr8RbDVddVHyTfAAsrekwKmP1"
+            crossorigin="anonymous">
+
+    <!-- <object type="text/html" data="/poll_template.html" hidden=true></object> -->
+
+</head>
+<body>
+
+<iframe id="poll_template" src="{% static 'poll_template/poll_template.html' %}" hidden=true></iframe>
+<iframe id="question_answer_template" src="{% static 'poll_template/question_answer_template.html' %}"
+        hidden=true></iframe>
+
+<div class="container-fluid" id="mainContainer">
+    <div class="row justify-content-center">
+        <div class="col-7 p-4 bg-primary text-white">
+            <div class="row align-items-center">
+                <div class="col fs-1">
+                    Список актуальных опросов:
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+
+<script type="text/javascript">
+    window.onload = function () {
+
+        function getCookie(name) {
+            let matches = document.cookie.match(new RegExp(
+                "(?:^|; )" + name.replace(/([\.$?*|{}\(\)\[\]\\\/\+^])/g, '\\$1') + "=([^;]*)"
+            ));
+            return matches ? decodeURIComponent(matches[1]) : undefined;
+        }
+
+
+        let mainContainer = document.querySelector('#mainContainer');
+
+        let pollTemplateRes = document.querySelector('#poll_template').contentWindow.document;
+        let pollTemplate = pollTemplateRes.querySelector('#pollDiv');
+
+        let pollQuestionsTemplateRes = document.querySelector('#question_answer_template').contentWindow.document;
+        let questionsTemp = pollQuestionsTemplateRes.querySelector('.questions-row-temp');
+        let questionTemp = pollQuestionsTemplateRes.querySelector('.question');
+        let oneAnswerTemp = pollQuestionsTemplateRes.querySelector('.one-answer');
+        let manyAnswerTemp = pollQuestionsTemplateRes.querySelector('.many-answer');
+        let textAnswerTemp = pollQuestionsTemplateRes.querySelector('.text-answer');
+        let buttonAnswer = pollQuestionsTemplateRes.querySelector('.button');
+
+        const domain = 'http://127.0.0.1:8000/';
+
+        let pollsLoader = new XMLHttpRequest();
+
+        pollsLoader.addEventListener('readystatechange', () => {
+            if (pollsLoader.readyState == 4) {
+                if (pollsLoader.status == 200) {
+                    let data = JSON.parse(pollsLoader.responseText);
+                    for (let i = 0; i < data.length; i++) {
+
+                        let newPoll = pollTemplate.cloneNode(true);
+                        newPoll.querySelector('.border').id = 'Poll-' + data[i]["id"];
+
+                        let pollTitle = newPoll.querySelector('#pollTitle');
+                        let pollDescription = newPoll.querySelector('#pollDescription');
+                        let pollDateStart = newPoll.querySelector('#pollDateStart');
+                        let pollDateStop = newPoll.querySelector('#pollDateStop');
+                        let pollOpenButton = newPoll.querySelector('.pollOpenButton');
+
+                        pollTitle.innerHTML = '<strong>' + data[i]["title"] + '</strong>';
+                        pollDescription.innerHTML = data[i]["description"];
+                        pollDateStart.innerHTML = 'Дата начала: ' + data[i]["date_start"];
+                        pollDateStop.innerHTML = 'Дата окончания: ' + data[i]["date_stop"];
+                        pollOpenButton.setAttribute('href', domain + 'api/get_poll_questions/' + data[i]["id"]);
+
+                        mainContainer.appendChild(newPoll);
+
+                        pollOpenButton.onclick = ButtonGetPollQuestions;
+                    }
+                }
+            }
+        });
+
+        function pollsLoad() {
+            pollsLoader.open('GET', domain + 'test/', true);
+            pollsLoader.send();
+        }
+
+        pollsLoad();
+
+        let pollQuestionsLoader = new XMLHttpRequest();
+
+        function ButtonGetPollQuestions() {
+            document.querySelectorAll('.pollOpenButton').forEach(element => element.onclick = ButtonGetPollQuestions);
+            this.onclick = closeActivePoll
+            if (document.querySelector('.active-poll')) {
+                document.querySelector('.active-poll').remove()
+            }
+            pollQuestionsLoader.open('GET', this.getAttribute('href'), true);
+            pollQuestionsLoader.send()
+        }
+
+        function closeActivePoll() {
+            this.onclick = ButtonGetPollQuestions
+            if (document.querySelector('.active-poll')) {
+                document.querySelector('.active-poll').remove()
+            }
+        }
+
+        pollQuestionsLoader.addEventListener('readystatechange', () => {
+            if (pollQuestionsLoader.readyState == 4) {
+                if (pollQuestionsLoader.status == 200) {
+                    let poll = JSON.parse(pollQuestionsLoader.responseText);
+
+                    let data = poll["questions"];
+
+                    let newQuestionsTemp = questionsTemp.cloneNode(true);
+                    newQuestionsTemp.classList.add("active-poll");
+
+                    for (let i = 0; i < data.length; i++) {
+
+                        let newQuestion = questionTemp.cloneNode(true);
+
+                        newQuestion.querySelector('.question-text').innerHTML = '<strong>' + data[i]["text"] + '</strong>';
+                        newQuestion.id = 'Question-' + data[i]["id"];
+                        newQuestionsTemp.querySelector('.questions-col-temp').appendChild(newQuestion);
+
+
+                        if (data[i]["type_question"] == "text") {
+                            let newAnswerText = textAnswerTemp.cloneNode(true);
+                            newQuestion.querySelector('.answer').appendChild(newAnswerText);
+                        }
+                        if (data[i]["type_question"] == "one_choice") {
+
+                            for (let j = 0; j < data[i]["choice"].length; j++) {
+
+                                let newOneAnswer = oneAnswerTemp.cloneNode(true);
+                                let label = newOneAnswer.querySelector('label');
+                                let input = newOneAnswer.querySelector('input');
+
+                                input.id = 'Answer-' + data[i]["choice"][j]["id"];
+                                label.setAttribute('for', 'Answer-' + data[i]["choice"][j]["id"]);
+                                label.innerHTML = data[i]["choice"][j]["text"];
+                                input.name = data[i]["id"];
+                                input.value = data[i]["choice"][j]["text"];
+
+                                newQuestion.querySelector('.answer').appendChild(newOneAnswer);
+
+                            }
+                        }
+                        if (data[i]["type_question"] == "many_choice") {
+                            for (let j = 0; j < data[i]["choice"].length; j++) {
+                                let newManyAnswer = manyAnswerTemp.cloneNode(true);
+                                let label = newManyAnswer.querySelector('label');
+                                let input = newManyAnswer.querySelector('input');
+
+                                input.id = 'Answer-' + data[i]["choice"][j]["id"];
+                                label.setAttribute('for', 'Answer-' + data[i]["choice"][j]["id"]);
+                                label.innerHTML = data[i]["choice"][j]["text"];
+                                input.name = data[i]["id"];
+                                input.value = data[i]["choice"][j]["text"];
+
+                                newQuestion.querySelector('.answer').appendChild(newManyAnswer);
+                            }
+                        }
+
+                        document.querySelector('#Poll-' + poll["id"]).appendChild(newQuestionsTemp);
+                    }
+
+                    let button = buttonAnswer.cloneNode(true);
+                    button.querySelector('button').onclick = ChoiceSave;
+                    button.querySelector('button').setAttribute('href', 'http://127.0.0.1:8000/api/save_user_choices/')
+                    //.querySelector('.questions-col-temp')
+                    newQuestionsTemp.appendChild(button);
+                }
+            }
+        });
+
+        function ChoiceSave() {
+            let choices = document.querySelectorAll('.question');
+            let postUserChoices = JSON;
+            let arrPostUserChoices = [];
+            for (let i = 0; i < choices.length; i++) {
+
+                let choice = choices[i];
+
+                function getAlmostUserChoice() {
+                    let userChoice = {
+                        user: Number(getCookie('user')),
+                        question: Number(choice.id.split('-')[1]),
+                    }
+                    return userChoice
+                }
+
+
+                let answers = choice.querySelector('input');
+
+                if (answers.type == 'text') {
+                    let userChoice = getAlmostUserChoice();
+                    userChoice.text_choice = answers.value;
+                    arrPostUserChoices.push(userChoice);
+                }
+                if (answers.type == 'radio') {
+                    let answer = choice.querySelectorAll('input');
+                    for (let j = 0; j < answer.length; j++) {
+
+                        if (answer[j].checked) {
+                            let userChoice = getAlmostUserChoice();
+                            userChoice.text_choice = answer[j].value;
+                            arrPostUserChoices.push(userChoice);
+                            break;
+                        }
+                    }
+                }
+                if (answers.type == 'checkbox') {
+                    let answer = choice.querySelectorAll('input');
+                    for (let j = 0; j < answer.length; j++) {
+
+
+                        if (answer[j].checked) {
+                            let userChoice = getAlmostUserChoice();
+                            userChoice.text_choice = answer[j].value;
+                            arrPostUserChoices.push(userChoice);
+                        }
+                    }
+                }
+            }
+            postUserChoices = JSON.stringify(arrPostUserChoices);
+            console.log(postUserChoices);
+            let userChoicesUpdater = new XMLHttpRequest();
+            userChoicesUpdater.open('POST', this.getAttribute('href'), true);
+            userChoicesUpdater.setRequestHeader('Content-Type', 'application/json');
+            userChoicesUpdater.send(postUserChoices);
+
+            document.querySelector('.active-poll').remove()
+        }
+
+    }
+
+</script>
+</body>
+</html>
